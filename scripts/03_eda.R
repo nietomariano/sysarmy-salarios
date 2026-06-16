@@ -28,7 +28,7 @@ df <- read_csv(
 # 2. ESTRUCTURA GENERAL
 # -----------------------------------------------------------------------------
 
-glimpse(df) # 60.356
+glimpse(df) # 60.356. 25
 colnames(df)
 
 # -----------------------------------------------------------------------------
@@ -53,20 +53,17 @@ df %>%
 
 
 # CONCLUSION:
-# Las variables PRINCIPALES utilizadas para el analisis no presentan
-# valores faltantes.
+# Las variables PRINCIPALES del modelo (log_sal_usd, sal_usd_blue, experiencia,
+# grupo_rol, genero_simple) no presentan NA. region y edad tienen NA minimos (204 y 12).
 #
-# Seniority, sueldo_dolarizado y uso_ia representan aproximadamente
-# un 67% de valores faltantes. Sin embargo, en el ultimo analisis que hicimos
-# (por periodos) nos muestra que estos faltantes no son aleatorios.
+# Los faltantes grandes son ESTRUCTURALES (cambios de cuestionario), no aleatorios:
+#   - seniority y uso_ia: 71.7% NA — disponibles desde 2024.1
+#   - sueldo_dolarizado: 60.4% NA — disponible desde 2021 via proxy pagos_en_dolares
+#     (menos NA que seniority porque arrastra esos años extra)
+#   - modalidad: 49% NA — desde 2022.2 | tam_empresa: 49% NA — desde 2023
 #
-# Las variables seniority, sueldo_dolarizado y uso_ia se encuentran
-# disponibles a partir de la encuesta del periodo 2024.1,
-# mientras que modalidad aparece a partir de 2022.2.
-#
-# Por lo tanto, los valores faltantes responden a cambios en el
-# cuestionario de Sysarmy entre distintos períodos y no a errores
-# de carga o falta de respuesta de los encuestados.
+# El analisis por anio/semestre confirma que los NA coinciden con los periodos
+# en que cada pregunta no fue relevada, no con errores de carga.
 
 
 
@@ -76,41 +73,42 @@ df %>%
 
 ### VARIABLES CATEGORICAS
 
-# grupo_rol — los grupos ahora son: Datos/AI, Infraestructura, Ciberseguridad,
-# Desarrollo/QA representan el ~54% del dataset
+# grupo_rol — cinco grupos. Desarrollo/QA domina con ~54% del dataset,
+# seguido por Infraestructura (19%), Roles de gestion (14%), Datos/AI (11%) y Ciberseguridad (2%)
 df %>%
   count(grupo_rol)%>%
   mutate(
     porcentaje = round(n/sum(n)*100,1)
   )
 
-# Distribución de seniority — Nota: ~72% NA corresponden a períodos 2019-2023
+# seniority — ~72% NA (periodos 2019-2023). Entre disponibles: Senior 53%, Semi 31%, Junior 16%
 df %>%
   count(seniority)%>%
   mutate(
     porcentaje = round(n/sum(n)*100,1)
   )
 
-# genero_simple — Nota: ~82% Hombres, representacion femenina baja (~14%)
+# genero_simple — ~82% Hombres, ~14% Mujeres, ~4% Otro/No binarie
 df %>%
   count(genero_simple)%>%
   mutate(
     porcentaje = round(n/sum(n)*100,1)
   )
 
-# modalidad — Nota: ~49% NA (períodos pre-2022); entre los disponibles, ~29% remoto
+# modalidad — ~49% NA (pre-2022.2). Entre los disponibles: ~57% remoto (29% del total)
 df %>%
   count(modalidad)%>%
   mutate(
     porcentaje = round(n/sum(n)*100,1)
   )
 
-# gente_a_cargo_grupo — Nota: ~74% sin equipo a cargo
+# gente_a_cargo: mediana 0, media 2.2 — ~74% sin equipo, distribucion muy sesgada (max 2500)
 df %>%
   count(gente_a_cargo_grupo)%>%
   mutate(
     porcentaje = round(n/sum(n)*100,1)
   )
+
 
 
 # VARIABLES NUMERICAS
@@ -212,10 +210,9 @@ ggplot(df, aes(y = log_sal_usd)) +
 # -----------------------------------------------------------------------------
 
 
-# Relacion entre Experiencia y salario
-# Relacion positiva debil — experiencia sola no determina el salario
-# Alta dispersion vertical
-# La mayoria de observaciones se encuentran entre 0 y 20 anios de experiencia
+# EXPERIENCIA vs SALARIO
+# Relacion positiva moderada (r = 0.37) pero con alta dispersion vertical:
+# la experiencia sola no determina el salario. Mayoria entre 0 y 20 años.
 ggplot(df, aes(x = experiencia, y = log_sal_usd)) +
   geom_jitter(alpha = 0.5, color = "darkgreen") +
   geom_smooth(method = "lm", color = "red") +
@@ -229,10 +226,10 @@ ggplot(df, aes(x = experiencia, y = log_sal_usd)) +
 
 
 
-# Relacion entre Edad y salario
-# Tendencia positiva similar a experiencia
-# Edad y experiencia probablemente correlacionadas — riesgo de multicolinealidad
-# Se evaluara incluir solo una de las dos en el modelo final
+# EDAD vs SALARIO
+# Tendencia positiva (r = 0.30), similar a experiencia.
+# OJO: edad y experiencia estan fuertemente correlacionadas (r = 0.76) -> multicolinealidad.
+# Por eso el modelo incluye solo experiencia, no ambas.
 ggplot(df, aes(x = edad, y = log_sal_usd)) +
   geom_jitter(alpha = 0.5, color = "darkblue") +
   geom_smooth(method = "lm", color = "red") +
@@ -245,9 +242,9 @@ ggplot(df, aes(x = edad, y = log_sal_usd)) +
   theme_minimal()
 
 
-# Relacion entre Personas a cargo y salario - con filtro sacando los outliers
-# 80% de observaciones en x=0 — se filtran valores > 200 (errores de carga)
-# El ajuste lineal muestra tendencia positiva pero con alta incertidumbre
+# PERSONAS A CARGO vs SALARIO (filtrando outliers de carga > 200)
+# 74% de las observaciones en x = 0. La correlacion lineal cruda es debil (r = 0.09)
+# porque la variable es muy sesgada; el grupo discretizado captura mejor la señal.
 ggplot(df %>% filter(gente_a_cargo <= 200), aes(x = gente_a_cargo, y = log_sal_usd)) +
   geom_jitter(alpha = 0.5, color = "purple") +
   geom_smooth(method = "lm") +
@@ -259,10 +256,9 @@ ggplot(df %>% filter(gente_a_cargo <= 200), aes(x = gente_a_cargo, y = log_sal_u
   ) +
   theme_minimal()
 
-# Relacion entre Grupo de personas a cargo y salario
-# Mediana salarial aumenta progresivamente con el tamaño del equipo
-# Cajas de tamaño similar — dispersion parecida entre los grupos
-# Equipo grande tiene pocos casos
+# DISTRIBUCION SALARIAL POR TAMAÑO DE EQUIPO
+# Mediana sube progresivamente: Sin equipo 6.89 < pequeño 7.10 < mediano 7.45 < grande 7.70.
+# Es la variable numerica con la señal mas limpia del EDA.
 df %>%
   filter(!is.na(gente_a_cargo_grupo)) %>%
   ggplot(aes(x = factor(gente_a_cargo_grupo,
@@ -325,9 +321,10 @@ ggplot(df %>% filter(!is.na(modalidad)),
 
 
 # SUELDOS DOLARIZADOS VS NO
-# Dolarizados muestran mediana y Q3 superiores a no dolarizados
-# La brecha persiste al deflactar — cobrar en dolares tiene efecto real sobre el salario
-# Mayor dispersión en dolarizados — los salarios en ese grupo varían más entre sí
+# Dolarizados: mediana y Q3 superiores (7.60 vs 7.49 en log). Mayor dispersion (IQR 1.16 vs 0.77).
+# La brecha persiste al deflactar — cobrar en dolares tiene efecto real.
+# OJO: el boxplot SUBESTIMA el efecto (el grupo dolarizado incluye 2021-2023 via proxy).
+# Comparacion limpia 2024+: dolarizados ganan ~42% mas (mediana 2537 vs 1790 USD).
 ggplot(df %>% filter(!is.na(sueldo_dolarizado)),
        aes(x = factor(sueldo_dolarizado, 
                       labels = c("No dolarizado", "Dolarizado")),
@@ -353,12 +350,11 @@ df %>%
   )
 
 
-# RELACION ENTRE EXPERIENCIA Y SALARIO SEGUN DOLARIZACION
-# Los dolarizados parten con un intercepto levemente superior (~7.2 vs ~7.0)
-# y la brecha se mantiene a lo largo de toda la trayectoria de experiencia
-# La diferencia es menor que en pesos pero no desaparece completamente
-# Confirma que la brecha observada en pesos era un efecto de la inflacion
-# no una diferencia real de poder adquisitivo
+# RELACION EXPERIENCIA × SALARIO SEGUN DOLARIZACION
+# Ambas rectas arrancan a un nivel similar (~7.1 a los 0 años), pero la pendiente
+# de los dolarizados es mas empinada (0.049 vs 0.029): la brecha se ABRE con la experiencia.
+# Es la evidencia visual de la interaccion experiencia:dolarizado que captura el modelo.
+# (Caption "Solo 2024-2026" es inexacto: el filtro incluye 2021+ via proxy.)
 ggplot(df %>% filter(!is.na(sueldo_dolarizado)),
        aes(x = experiencia, 
            y = log_sal_usd,
@@ -378,11 +374,10 @@ ggplot(df %>% filter(!is.na(sueldo_dolarizado)),
 
 
 
-# TAMANO DE LA EMPRESA
-# Medianas similares entre todos los tamaños — sin tendencia clara ni consistente
-# Leve variacion en tramos intermedios pero se estabiliza en empresas grandes
-# Tamaño de empresa no parece ser un predictor relevante del salario
-
+# TAMAÑO DE LA EMPRESA
+# Tendencia positiva clara: la mediana sube de ~6.85 (1-10 personas) a ~7.41 (+10000),
+# ~65% en USD de punta a punta. Las empresas grandes pagan mas de forma consistente.
+# No se incluye en el modelo por el alto % de NA, no por falta de señal.
 ggplot(df %>% filter(!is.na(tam_empresa)),
        aes(x = factor(tam_empresa, 
                       levels = c("1", "2-10", "11-50", "51-100", 
@@ -405,10 +400,12 @@ ggplot(df %>% filter(!is.na(tam_empresa)),
 
 
 # CONCLUSION SECCION 7:
-# Seniority es la variable categórica con mayor poder discriminante.
-# Modalidad y tamaño de empresa no muestran diferencias salariales relevantes.
-# Dolarización en pesos nominales mostraba brecha del 34%, pero al deflactar
-# por dolar blue la diferencia prácticamente desaparece — era un efecto inflacionario.
+# - Seniority: la mejor categorica. Mediana USD: Junior ~1048, Semi ~1719, Senior ~2627.
+# - Modalidad: Remoto/Hibrido similares (~7.3); Presencial claramente por debajo (~6.8).
+# - Tamaño de empresa: tendencia positiva clara (6.85 -> 7.41). No entra al modelo por NA, no por falta de señal.
+# - Dolarizacion: el boxplot subestima (grupo TRUE arrastra 2021-2023). Comparacion limpia
+#   2024+: ~42% mas en USD. El scatter muestra que ademas la brecha crece con la experiencia
+#   (interaccion). NO es un efecto inflacionario que desaparece.
 
 # Tablas de apoyo
 df %>%
@@ -453,10 +450,9 @@ ggplot(df,
   theme_minimal()
 
 
-# Al controlar por seniority las diferencias salariales entre generos se reducen notablemente
-# Las cajas de Hombre y Mujer se solapan dentro de cada nivel — medianas muy similares
-# Sugiere que la brecha observada sin controlar se explica principalmente por la distribución
-# de seniority: más hombres en Senior que mujeres
+# Al controlar por seniority la brecha se reduce pero NO desaparece:
+# persiste en ~11-12% dentro de Semi-Senior y Senior (Junior ~5%).
+# Seniority explica la parte de composicion, pero queda una brecha real dentro de cada nivel.
 ggplot(df %>% filter(!is.na(seniority), 
                      genero_simple %in% c("Hombre", "Mujer")),
 
@@ -473,9 +469,9 @@ ggplot(df %>% filter(!is.na(seniority),
 
 
 
-# Hombres tienen mayor proporcion de Senior (~58%) vs mujeres (~40%)
-# Mujeres tienen mayor proporcion de Junior y Semi-Senior
-# La distribucion de seniority explica gran parte de la brecha salarial entre generos
+# Hombres: 56.6% Senior vs Mujeres: 39.3% Senior — los hombres estan mas concentrados en Senior.
+# Esto explica la parte de COMPOSICION de la brecha cruda (+21%), pero no toda:
+# dentro de cada nivel persiste una brecha de ~11-12% (ver grafico anterior).
 ggplot(df %>% filter(!is.na(seniority),
                      genero_simple %in% c("Hombre", "Mujer")),
        
@@ -504,11 +500,11 @@ df %>%
 
 
 # CONCLUSION SECCION 8:
-# El genero muestra una brecha salarial a favor de hombres incluso controlando
-# por seniority — especialmente en Semi-Senior y Senior.
-# La distribucion de seniority amplifica la brecha: hombres ~53% Senior 
-# vs mujeres ~35% Senior.
-# El genero sera incluido en el modelo para cuantificar su efecto independiente.
+# El genero muestra brecha a favor de hombres INCLUSO controlando por seniority,
+# especialmente en Semi-Senior y Senior (~11-12% dentro de cada nivel).
+# La brecha cruda (+21%) combina dos efectos: composicion (hombres 56.6% Senior
+# vs mujeres 39.3%) + brecha dentro de nivel. El modelo aisla el segundo: ~10% neto.
+# Por eso el genero se incluye en el modelo: tiene efecto propio mas alla del seniority.
 
 
 # -----------------------------------------------------------------------------
@@ -516,10 +512,9 @@ df %>%
 # -----------------------------------------------------------------------------
 
 # SALARIO SEGUN REGION
-# Las tres regiones muestran medianas muy similares en USD
-# CABA tiene una leve ventaja pero las diferencias son pequeñas
-# El mercado IT argentino es relativamente homogéneo en términos geográficos
-# Observaciones: CABA = 8.434, GBA = 2.578, Interior = 4.108
+# CABA y GBA/Prov.BA con medianas parecidas (GBA -5%), pero Interior claramente por debajo (-13%).
+# El mercado es homogeneo entre CABA y GBA; Interior es la region que se separa.
+# Observaciones: CABA = 32.492, Interior = 15.998, GBA = 11.662
 ggplot(df %>% filter(!is.na(region)),
        aes(x = region, y = log_sal_usd, fill = region)) +
   geom_boxplot() +
@@ -584,10 +579,10 @@ ggplot(df %>% filter(trabajo_de %in% top_roles),
   theme_minimal()
 
 
-# Desarrollo/QA tiene la pendiente más pronunciada — la experiencia premia mas en ese grupo
-# Roles de gestion arranca con el intercepto mas alto — salario base superior desde el inicio
-# Infraestructura tiene la pendiente mas baja — la experiencia premia menos
-# Ciberseguridad y Datos/AI muestran pendientes similares y convergen al final
+# Roles de gestion: intercepto mas alto (7.32) pero pendiente mas plana (0.015) — arranca arriba.
+# Desarrollo/QA: pendiente mas pronunciada (0.052) — la experiencia premia mas.
+# Entre los tecnicos, Infraestructura es el de pendiente mas baja (0.025).
+# Ciberseguridad y Datos/AI: pendientes similares (0.031 / 0.034).
 df %>%
   filter(!is.na(experiencia), !is.na(log_sal_usd)) %>%
   ggplot(aes(x = experiencia, y = log_sal_usd, color = grupo_rol)) +
@@ -601,14 +596,12 @@ df %>%
   theme_minimal()
 
 
-# Se excluye Roles de gestion de la comparacion
-# Para ver diferencia unicamente entre grupos tecnicos
-
-# Ciberseguridad y Datos/AI muestran pendientes muy similares y arrancan desde el mismo punto
-# Infraestructura tiene la pendiente mas baja y el intercepto mas bajo — crece más lento
-# Desarrollo/QA tiene el intercepto mas bajo pero la pendiente mas alta —
-# arranca peor pagado que el resto pero la experiencia lo premia mas que a cualquier otro grupo
-# Un perfil senior de Desarrollo/QA termina igualando o superando a Ciberseguridad y Datos/AI
+# (excluyendo Roles de gestion, para ver solo los grupos tecnicos)
+# Ciberseguridad y Datos/AI: pendientes e interceptos similares, arrancan parecido.
+# Infraestructura: la pendiente mas baja (0.025) — crece mas lento.
+# Desarrollo/QA: el intercepto MAS BAJO (6.58) pero la pendiente MAS ALTA (0.052) —
+# arranca peor pagado pero la experiencia lo premia mas que a cualquier otro grupo.
+# Un senior de Desarrollo/QA termina igualando o superando a los demas.
 df %>%
   filter(!is.na(experiencia), !is.na(log_sal_usd),
          grupo_rol != "Roles de gestión") %>%
@@ -625,17 +618,15 @@ df %>%
 
 
 # CONCLUSION SECCION 9:
-# Las diferencias regionales son pequeñas en USD — mercado IT homogeneo geograficamente.
-# CABA tiene una leve ventaja pero no es determinante.
-# Roles de gestion lidera entre grupos — Desarrollo/QA queda en el extremo inferior.
-# A nivel de rol individual, Manager/Director y Architect son los mejor pagos.
-# QA/Tester y Consultant son los peor pagos del top 10.
-# La experiencia premia más en Desarrollo/QA — Infraestructura crece mas lento.
-# Region y grupo de rol serán incluidos como variables de control en el modelo.
+# Region: CABA y GBA parecidas, Interior ~13% por debajo (no es homogeneo del todo).
+# Grupo de rol: Roles de gestion lidera; Desarrollo/QA en el extremo inferior.
+# A nivel individual: Manager/Director y Architect los mejor pagos; QA/Tester el peor.
+# La experiencia premia mas en Desarrollo/QA (pendiente 0.052); Infraestructura es el
+# tecnico que crece mas lento. Region y grupo de rol entran al modelo como controles.
 
 
 # -----------------------------------------------------------------------------
-# 9B. USO DE IA — ADOPCIÓN Y PERFIL
+# 9B. USO DE IA — ADOPCION Y PERFIL
 # -----------------------------------------------------------------------------
 
 
@@ -754,11 +745,11 @@ df %>%
   
   
 
-# Las tres medianas son muy similares — el uso de IA no determina el salario de forma clara
-# Alto (4-5) tiene una leve ventaja pero la diferencia es pequeña
-# Bajo (1-2) supera a Medio (3) — no hay relación lineal
-# INTERPRETACION: el uso de IA puede ser una consecuencia del rol y seniority
-# más que una causa directa del salario
+# ¿Los que mas usan IA ganan mas?
+# Relacion positiva LEVE y monotona: Bajo(0-2) 7.50 < Medio(3) 7.54 < Alto(4-5) 7.67.
+# El uso alto se asocia a ~18% mas de salario, pero la diferencia es chica.
+# INTERPRETACION: probablemente mediado por rol y seniority (los roles mejor pagos
+# y con mas experiencia adoptan mas IA), no una relacion causal directa uso->salario.
   df %>%
     filter(!is.na(uso_ia)) %>%
     mutate(uso_ia_grupo = case_when(
@@ -780,75 +771,78 @@ df %>%
     theme(legend.position = "none")
   
 
-
-
-# -----------------------------------------------------------------------------
-# 10. CONCLUSIONES DEL EDA
-# -----------------------------------------------------------------------------
-
+  # -----------------------------------------------------------------------------
+  # 10. CONCLUSIONES DEL EDA
+  # -----------------------------------------------------------------------------
+  
   # VARIABLES CON MAYOR PODER EXPLICATIVO:
+  #
   # - Seniority: mayor señal del EDA — separacion clara y progresiva entre los tres niveles.
   #   Junior mediana ~7.0, Semi-Senior ~7.5, Senior ~7.8 (log_sal_usd).
-  #   Confirmado por el modelo: ascender a Senior implica un incremento del ~70% sobre Junior.
+  #   Confirmado por el modelo: ser Senior implica ~64% mas que Junior (modp3).
   #
-  # - Gente a cargo: tendencia progresiva y consistente — la mediana sube de ~7.0 (sin equipo)
-  #   a ~7.8 (equipo grande). Es la variable numerica con la señal más limpia del EDA.
+  # - Gente a cargo: tendencia progresiva y consistente en su forma discretizada —
+  #   la mediana sube de ~6.9 (sin equipo) a ~7.7 (equipo grande). En su forma continua
+  #   la correlacion es debil (r = 0.09) porque el 74% no tiene equipo a cargo.
   #
-  # - Grupo de rol: Roles de gestion lidera con mediana claramente superior al resto.
-  #   Los cuatro grupos tecnicos (Ciberseguridad, Datos/AI, Infraestructura, Desarrollo/QA)
-  #   muestran medianas muy comprimidas entre si — las diferencias existen pero son pequeñas.
-  #   A nivel de rol individual, Manager/Director y Architect son los mejor pagos;
-  #   QA/Tester y Consultant son los peores pagos del top 10.
+  # - Grupo de rol: Roles de gestion lidera con mediana claramente superior (1893 USD).
+  #   Los cuatro grupos tecnicos quedan comprimidos entre si (Ciberseguridad 1194,
+  #   Infraestructura 1100, Datos/AI 1056, Desarrollo/QA 937). A nivel de rol individual,
+  #   Manager/Director y Architect son los mejor pagos; QA/Tester el peor del top 10.
   #
-  # - Experiencia: relacion positiva pero con alta dispersion — no determina el salario de 
-  #   forma aislada. Hallazgo destacado: la pendiente es más pronunciada en Desarrollo/QA —
-  #   ese grupo arranca con el intercepto más bajo pero es el que más se beneficia
-  #   de cada año adicional de experiencia (ver Rplot20).
+  # - Experiencia: relacion positiva moderada (r = 0.37) pero con alta dispersion —
+  #   no determina el salario de forma aislada. Hallazgo destacado: la pendiente es mas
+  #   pronunciada en Desarrollo/QA (0.052) — ese grupo arranca con el intercepto mas bajo
+  #   pero es el que mas se beneficia de cada año adicional de experiencia (ver Rplot20).
+  #   OJO: edad y experiencia estan fuertemente correlacionadas (r = 0.76) — multicolinealidad,
+  #   por eso el modelo incluye solo experiencia.
   #
-  # - Genero: brecha a favor de hombres visible sin controlar (Rplot13).
-  #   Al controlar por seniority las cajas se solapan dentro de cada nivel,
-  #   pero la brecha persiste — especialmente en Semi-Senior y Senior.
-  #   Confirmado por el modelo: ser mujer se asocia con un salario ~10% menor (coef. -0.106, ***).
+  # - Genero: brecha a favor de hombres sin controlar (+21% — Rplot14).
+  #   Al controlar por seniority la brecha se reduce pero NO desaparece:
+  #   persiste en ~11-12% dentro de Semi-Senior y Senior (Junior ~5%).
+  #   La brecha cruda combina composicion (hombres 56.6% Senior vs mujeres 39.3%)
+  #   + brecha dentro de nivel. Confirmado por el modelo: ~10% menos (coef. -0.103, ***).
   #
-  # - Dolarizacion: su efecto no es directo sino mediado por la experiencia.
-  #   Las medianas de arranque son similares entre grupos, pero los dolarizados muestran
-  #   mayor dispersion hacia salarios altos (IQR mas amplio — Rplot10).
+  # - Dolarizacion: su efecto esta tanto en el NIVEL como en la PENDIENTE.
+  #   El boxplot exploratorio SUBESTIMA el nivel porque el grupo dolarizado arrastra
+  #   2021-2023 (proxy) mientras que el no-dolarizado es solo 2024+. En la comparacion
+  #   limpia 2024+, los dolarizados ganan ~42% mas en USD (mediana 2537 vs 1790).
   #   El efecto principal aparece en la interaccion con experiencia: la pendiente salarial
-  #   de los dolarizados es significativamente mas pronunciada — la brecha crece con los
-  #   años de carrera (Rplot11). Confirmado en el modelo: la interaccion
-  #   experiencia:sueldo_dolarizado es altamente significativa (***) y sube el R²
-  #   de 0.2881 a 0.3373.
+  #   de los dolarizados es mas pronunciada (la brecha crece con los años — Rplot12).
+  #   Confirmado en el modelo: la interaccion experiencia:sueldo_dolarizado es altamente
+  #   significativa (***) y sube el R² de 0.2881 a 0.3373.
   #
   #
   #
   #
   # VARIABLES CON MENOR PODER EXPLICATIVO:
   #
-  # - Modalidad: Remoto e Hibrido muestran medianas similares (~7.2 en log_sal_usd).
-  #   Presencial queda claramente por debajo (~6.9) — diferencia equivalente a ~26% en USD.
+  # - Modalidad: Remoto e Hibrido muestran medianas similares (~7.3 en log_sal_usd).
+  #   Presencial queda claramente por debajo (~6.8) — diferencia equivalente a ~50% en USD.
   #   La distincion relevante es Presencial vs el resto, no entre Remoto e Hibrido.
   #
-  # - Region: CABA y GBA/Prov. BA muestran medianas casi identicas.
-  #   Interior es la que queda por debajo de forma consistente.
-  #   El modelo confirma: GBA = -0.062, Interior = -0.123 respecto a CABA.
-  #   El mercado IT es relativamente homogeneo entre CABA y GBA; Interior muestra
-  #   una diferencia real pero moderada (~13% menos que CABA).
+  # - Region: CABA y GBA/Prov. BA muestran medianas parecidas (GBA -5%).
+  #   Interior es la que queda por debajo de forma consistente (-13% respecto a CABA).
+  #   El modelo confirma (modp3): GBA = -0.082, Interior = -0.136.
+  #   El mercado IT es homogeneo entre CABA y GBA; Interior muestra una diferencia real.
   #
-  # - Tamaño de empresa: sin tendencia clara ni consistente (Rplot12).
-  #   Leve crecimiento hasta empresas medianas pero se estabiliza — no es un predictor relevante.
+  # - Tamaño de empresa: tendencia positiva CLARA y monotona — la mediana sube de
+  #   ~6.85 (1-10 personas) a ~7.41 (+10000), ~65% en USD de punta a punta (Rplot13).
+  #   No se incluye en el modelo por el alto % de NA, NO por falta de señal.
   #
   # HALLAZGOS SOBRE USO DE IA (2024-2026):
-  # - La adopcion crecio en todos los grupos: de ~25-37% a ~60-70% de uso alto en dos años.
-  # - Ciberseguridad es el grupo que adopta mas lento y queda rezagado al final.
-  # - Datos/AI lidera desde el inicio; Desarrollo/QA arranca bajo pero termina liderando.
+  # - La adopcion crecio en todos los grupos: de ~25-37% a ~57-70% de uso alto en dos años.
+  # - Ciberseguridad es el grupo que adopta mas lento y queda rezagado al final (57%).
+  # - Datos/AI lidera desde el inicio (37%); Desarrollo/QA arranca a la par y termina liderando (70%).
   # - Contraintuitivo: Junior y Semi-Senior usan IA mas intensamente que Senior (mediana 4 vs 3).
   #   Interpretacion: los juniors ingresaron al mercado con IA ya disponible —
   #   la adopcion se da de abajo hacia arriba en las organizaciones.
-  # - El uso de IA no se traduce directamente en mayor salario — esta mediado por rol y seniority.
+  # - El uso de IA tiene una relacion positiva LEVE con el salario (~18%, Bajo 7.50 < Medio 7.54
+  #   < Alto 7.67), probablemente mediada por rol y seniority — no una relacion causal directa.
   #
   # DECISION DE MODELADO:
   # - Variable objetivo: log_sal_usd — salario deflactado por dolar blue (2019-2026)
-  # - Ambos modelos trabajan con datos desde 2024, unico periodo con seniority 
+  # - Los tres modelos trabajan con datos desde 2024, unico periodo con seniority
   #   disponible (n = 17.079 tras drop_na)
   #
   # - Modelo 1: log_sal_usd ~ experiencia + grupo_rol + seniority + genero_simple + region
@@ -866,6 +860,5 @@ df %>%
   #
   # - Los tres modelos son comparados con ANOVA — cada uno agrega explicacion significativa (***)
   #
-  # - Se espera que seniority sea el predictor con mayor impacto individual
-  #   y Roles de gestion el grupo con mayor intercepto relativo
-  
+  # - Seniority es el predictor con mayor impacto individual y Roles de gestion
+  #   el grupo con mayor intercepto relativo (confirmado en el modelo).
