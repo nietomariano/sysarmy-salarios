@@ -12,25 +12,23 @@ df_sysarmy <- read_csv(
 )
 
 # Verificacion de inputs
-dim(df_sysarmy)
+dim(df_sysarmy) # 75649
 
 
 
 # -----------------------------------------------------------------------------
 # 2. LIMPIEZA DE TIPOS
 # -----------------------------------------------------------------------------
-# Debbugueando
-cat("Cantidad de registros:", nrow(df_sysarmy), "\n") # 75.649
 
-# Las variables numéricas llegan como character por formatos inconsistentes
-# entre encuestas — parse_number extrae el número ignorando símbolos y separadores
+# Las numericas llegan como character por formatos inconsistentes entre encuestas.
+# parse_number extrae el numero ignorando simbolos y separadores.
 
-# Guardamos NA antes de la conversión para comparar después
+# NA antes de convertir, para medir cuantos valores eran texto no convertible
 na_antes <- colSums(is.na(df_sysarmy[c("salario_bruto", "salario_neto",
                                        "edad", "experiencia",
                                        "antiguedad_empresa", "antiguedad_puesto",
                                        "gente_a_cargo")]))
-
+na_antes # salario_neto 33 , edad 33, salario_bruto 1
 
 
 df_sysarmy <- df_sysarmy %>%
@@ -49,15 +47,14 @@ na_despues <- colSums(is.na(df_sysarmy[c("salario_bruto", "salario_neto",
                                          "edad", "experiencia",
                                          "antiguedad_empresa", "antiguedad_puesto",
                                          "gente_a_cargo")]))
+na_despues
 
-
-# NA generados por parse_number — valores que existian pero no eran convertibles
+# NA nuevos generados por parse_number (valores que existian pero no eran numericos)
 na_despues - na_antes
-# Resultado:
-# salario_bruto: 47 NA nuevos — texto registrado en la encuesta en lugar de numeros
-# salario_neto:   9 NA nuevos — mismo problema que salario_bruto en menor cantidad
-# resto de variables: 0 NA nuevos — conversión exitosa
-# Los 56 registros afectados van a ser eliminados en el paso 6
+# salario_bruto: 47 NA nuevos — texto cargado en lugar de numeros (ej. "BRUTO")
+# salario_neto:   9 NA nuevos — mismo problema, menor cantidad
+# edad: algunos NA nuevos por texto libre — el resto convierte sin perdidas
+# Los NA de sal_bruto se eliminan en el paso 6
 
 
 # -----------------------------------------------------------------------------
@@ -72,22 +69,18 @@ duplicados    <- filas_totales - filas_unicas
 cat("Filas totales:", filas_totales, "\n")
 cat("Filas únicas:", filas_unicas, "\n")
 cat("Duplicados:", duplicados, "\n")
-# Resultado: 290 duplicados (0.38%) — encuestados que enviaron el formulario más de una vez
-# Decisión: se eliminan con distinct() — no aportan información nueva
+# 290 duplicados (0.38%) — formularios enviados mas de una vez. Se eliminan con distinct()
+
 
 df_sysarmy <- df_sysarmy %>%
   distinct()
 
-# Debbugueando
 cat("Cantidad de registros:", nrow(df_sysarmy), "\n") # 75.359
+
 
 # -----------------------------------------------------------------------------
 # 3. DEFINICIÓN DE ROLES A INCLUIR
 # -----------------------------------------------------------------------------
-
-# Se definen los roles del sector data y tecnología a incluir en el analisis
-# Los strings deben coincidir exactamente con los valores de la columna trabajo_de
-# Si no matchean se pierdan observaciones silenciosamente
 
 roles_datos <- c(
   "Data Scientist",
@@ -159,13 +152,9 @@ roles_liderazgo <- c(
   "VP / C-Level"
 )
 
-# Datos: Data Governance, GRC
-# Ciberseguridad: el resto
-# Developer, QA / Tester, Consultant -> Desarrollador
-# Technical Leadr, Manager / director, Project Manager, SCRUM Master
-# Product Manager en negocio
-# Aechitect en Arquitectura
-
+# Cada vector agrupa los roles de un area tematica. Los strings deben coincidir
+# EXACTACTAMENTE con trabajo_de. 
+# El agrupamiento final se hace en el paso 5 (grupo_rol).
 todos_los_roles <- c(
   roles_datos,
   roles_infraestructura,
@@ -181,15 +170,15 @@ todos_los_roles <- c(
 # -----------------------------------------------------------------------------
 
 
-# Se filtra conservando solo los roles del sector data y tecnologia
-# El dataset pasa de 75.359 a aproximadamente 62757 observaciones
+# Conservamos solo los roles del sector data y tecnologia
+# El dataset pasa de 75.359 a 62.757 observaciones
 df_clean <- df_sysarmy %>%
   filter(trabajo_de %in% todos_los_roles)
 
-# Debbugueando
-dim(df_clean) # 62757 registros , 26 columnas
 
-# Roles excluidos con mayor volumen
+dim(df_clean) # 62757 registros, 26 columnsa
+
+# Roles excluidos con mayor volumen (control)
 df_sysarmy %>%
   filter(!trabajo_de %in% todos_los_roles) %>%
   count(trabajo_de, sort = TRUE) %>%
@@ -197,13 +186,12 @@ df_sysarmy %>%
   print(n = Inf)
 
 
-# Distribucion por grupo de rol
-# Identificamos roles con pocas observaciones
+# Distribucion por rol — identificamos roles con muy pocas observaciones
 df_clean %>%
   count(trabajo_de, sort = TRUE)
 
-# Roles con menos de 10 observaciones no son representativos para el analisis
-# Se eliminan para evitar distorsiones en los grupos
+# Roles con menos de 10 obs no son representativos — se eliminan
+# Saca 73 filas repartidas en 21 micro-roles (ej. Pentester, MLOps, DataOps)
 roles_minimos <- df_clean %>%
   count(trabajo_de) %>%
   filter(n >= 10)
@@ -212,21 +200,20 @@ df_clean <- df_clean %>%
   filter(trabajo_de %in% roles_minimos$trabajo_de)
 
 # Verificacion final
-dim(df_clean) # 15540
+dim(df_clean) # 62.684
 df_clean %>%
   count(trabajo_de, sort = TRUE)
 
-# Debugueando
-cat("Cantidad de registros:", nrow(df_clean), "\n") # 15.540
+cat("Cantidad de registros:", nrow(df_clean), "\n") # 62.684
 
 # -----------------------------------------------------------------------------
 # 5. CREACIÓN DE VARIABLES PARA EL ANÁLISIS
 # -----------------------------------------------------------------------------
 
 
-# Asigna cada rol a uno de los cuatro grupos definidos en el paso 3
-# No se necesita TRUE ~ "Otro" porque el paso 4 ya garantiza
-# que todas las observaciones pertenecen a alguno de los cuatro grupos
+# Asigna cada rol a uno de los cinco grupos definidos en el paso 3.
+# No necesita TRUE ~ "Otro": el paso 4 garantiza que toda fila pertenece a un grupo.
+# El factor con levels fija el orden en tablas y graficos (sin esto, R ordena alfabetico).
 df_clean <- df_clean %>%
   mutate(
     grupo_rol = case_when(
@@ -250,9 +237,9 @@ df_clean <- df_clean %>%
     
     
     
-    # ordered = TRUE establece jerarquia: Junior < Semi-Senior < Senior
-    # El ~67% de los valores son NA — estructurales, no errores
-    # Corresponden a períodos 2019-2023 donde la variable no fue relevada
+    # Factor ORDENADO: Junior < Semi-Senior < Senior (ordered = TRUE habilita la jerarquia).
+    # 71.7% NA estructurales: la pregunta recien aparece en 2024.1 (2019-2023 no la relevaron).
+    # Esto define el alcance temporal del modelo: drop_na(seniority) deja solo 2024+.
     seniority = factor(
       seniority,
       levels = c("Junior", "Semi-Senior", "Senior"),
@@ -260,10 +247,9 @@ df_clean <- df_clean %>%
     ),
     
    
-    # Variable continua convertida a grupos para facilitar el analisis
-    # El ~80% tiene gente_a_cargo = 0. La variable continua es muy sesgada
-    # TRUE ~ NA_character_ asume los NA originales
-    # ordered = TRUE establece jerarquía desde Sin equipo < hasta.. < Equipo grande
+    # Discretiza gente_a_cargo (muy sesgada: 74% en 0) en cuatro tramos.
+    # Agrupar evita que outliers de carga (cientos a cargo) distorsionen el analisis.
+    # TRUE ~ NA_character_ captura los NA originales de gente_a_cargo.
     gente_a_cargo_grupo = case_when(
       gente_a_cargo == 0 ~ "Sin equipo",
       gente_a_cargo >= 1 & gente_a_cargo <= 4 ~ "Equipo pequeño",
@@ -273,24 +259,24 @@ df_clean <- df_clean %>%
     ),
     
     
-      gente_a_cargo_grupo = factor(
-        gente_a_cargo_grupo,
-        levels = c(
-          "Sin equipo",
-          "Equipo pequeño",
-          "Equipo mediano",
-          "Equipo grande"
-        ),
-        ordered = TRUE
+    # Factor ORDENADO de menor a mayor tamaño de equipo
+    gente_a_cargo_grupo = factor(
+      gente_a_cargo_grupo,
+      levels = c(
+        "Sin equipo",
+        "Equipo pequeño",
+        "Equipo mediano",
+        "Equipo grande"
       ),
+      ordered = TRUE
+    ),
     
     
     
-    #  VERIFICACION PREVIA: valores originales detectados antes del mutate
-    # - "Full-Time" (32.142 obs) → "Staff" en encuestas antiguas, mismo tipo, distinto nombre
-    # - "Remoto (empresa de otro pais)" (3.282 obs)  → Contractor
-    # - "Part-Time" (1.989 obs),  no lo calificamos como tipo de contrato → Otro
-    # - "Participación societaria en una cooperativa" (285 obs)  → Otro
+    # VERIFICACION PREVIA (conteos crudos en df_clean post-rol, antes del mutate):
+    # - "Full-Time" (25.989)  -> "Staff": mismo tipo, nombre viejo en encuestas antiguas
+    # - "Remoto (empresa de otro pais)" (2.875) -> Contractor (relacion con el exterior)
+    # - "Part-Time" (1.588) y "Participacion societaria..." (254) -> Otro
     contrato = case_when(
       tipo_contrato == "Staff (planta permanente)"                         ~ "Staff",
       tipo_contrato == "Full-Time"                                         ~ "Staff",
@@ -309,10 +295,8 @@ df_clean <- df_clean %>%
     ),
     
     
-    # Estandariza modalidad_trabajo en tres categorias limpias
-    # TRUE ~ NA_character_ asume los valores que no matchean, corresponden a periodos
-    # donde la variable no fue relevada, a diferencia de contrato aca la mayoria de los 
-    # NA corresponden a que la pregunta no se hizo en todas las encuestas
+    # Estandariza modalidad_trabajo en tres categorias; TRUE ~ NA_character_ para el resto.
+    # 49% NA estructural: la pregunta recien aparece en 2022.2 (2019-2022.1 no la relevaron).
     modalidad = case_when(
       modalidad_trabajo == "100% remoto" ~ "Remoto",
       modalidad_trabajo == "Híbrido (presencial y remoto)" ~ "Hibrido",
@@ -326,11 +310,12 @@ df_clean <- df_clean %>%
     ),
     
     
-    # Estandariza los rangos de cantidad de personas en 11 categorías ordenadas
-    # ordered = TRUE — El tamaño de empresa tiene jerarquia natural de menor a mayor
-    # Los levels fuerzan el orden correcto — sin esto R ordenaria alfabéticamente
-    # y "+10000" quedaría primero por el símbolo "+"
-    # TRUE ~ NA_character_ — valores no reconocidos van a NA
+   
+    # Estandariza cantidad_personas_organizacion en 11 tramos ordenados.
+    # ordered = TRUE + levels: sin esto R ordena alfabetico ("+10000" quedaria primero).
+    # OJO: este case_when solo mapea el formato largo ("De 11 a 50 personas").
+    # 2021 y 2022.1 usan formato abreviado ("11-50") que NO matchea -> quedan NA.
+    # No es que falte el dato: es una limitacion de mapeo (tam_empresa no se usa en el modelo).
     tam_empresa = case_when(
       cantidad_personas_organizacion == "1 (solamente yo)" ~ "1",
       cantidad_personas_organizacion == "De 2 a 10 personas" ~ "2-10",
@@ -358,11 +343,9 @@ df_clean <- df_clean %>%
     
     
     
-    # Texto libre con muchas variantes, se mapean en tres categorias
-    # Se cubren variantes con y sin tilde, mayusculas y minusculas, con sufijo Cis
-    # TRUE ~ "Otro/No binarie": identidades que no son Hombre ni Mujer
-    # No se usa NA porque no son datos faltantes sino identidades distintas
-    # No tiene ordered = TRUE — las categorias no tienen jerarquia
+    # Colapsa el texto libre de genero en tres categorias (con/sin tilde, may/min, sufijo Cis).
+    # Catch-all = "Otro/No binarie", NO NA: no son datos faltantes sino identidades distintas.
+    # Sin ordered = TRUE: las categorias de genero no tienen jerarquia.
     genero_simple = case_when(
       genero %in% c("Hombre Cis", "Varón Cis", "Hombre", "Varón", "Varon",
                     "Masculino", "masculino", "hombre", "varón") ~ "Hombre",
@@ -376,15 +359,14 @@ df_clean <- df_clean %>%
     ),
     
     
-    # VERIFICACIÓN PREVIA: valores originales detectados antes del mutate
-    # - "Posgrado" (1.657 obs) = "Posgrado/Especialización", mismo nivel, distinto nombre entre encuestas
-    # - "Primario" (16 obs) — probable error de carga
-    # - NA masivos desde 2021 — variable paso a ser opcional en el cuestionario
-    # - "Maestría" solo aparece desde 2021 — en 2019-2020 estaba dentro de "Posgrado"
+    # VERIFICACION PREVIA (conteos crudos en df_clean post-rol):
+    # - "Posgrado" (1.138) = "Posgrado/Especialización": mismo nivel, distinto nombre entre ediciones
+    # - "Primario" (10) -> NA: muy pocas obs, probable error de carga
+    # - ~40% NA: la pregunta paso a ser OPCIONAL desde 2021 (no es error de carga)
     nivel_estudios = case_when(
       nivel_estudios == "Posgrado" ~ "Posgrado/Especialización",
-      nivel_estudios == "Primario" ~ NA_character_,  # muy pocas obs, descartamos
-      TRUE ~ nivel_estudios  # el resto ya está bien escrito
+      nivel_estudios == "Primario" ~ NA_character_,  
+      TRUE ~ nivel_estudios  
     ),
     
     nivel_estudios = factor(
@@ -397,12 +379,10 @@ df_clean <- df_clean %>%
     ),
     
     
-    # Clasificamos variable provincia en tres regiones geograficas
-    # TRUE ~ "Interior" captura todas las provincias que no son CABA ni Buenos Aires
-    # No es un valor desconocido, es una categoria valida que agrupa el resto del pais
-    # No tiene ordered = TRUE — las regiones no tienen jerarquia natural
-    # Se chequeo mediante un count que no existan ubicaciones fuera del pais y que
-    # caigan en interior
+    # Colapsa provincia en tres regiones. El is.na() va ANTES del catch-all:
+    # sin esa linea, los NA de provincia caerian en "Interior" por el TRUE.
+    # Verificado: todo lo que cae en "Interior" son provincias argentinas (sin ubicaciones del exterior).
+    # Sin ordered = TRUE: las regiones no tienen jerarquia.
     region = case_when(
       provincia == "Ciudad Autónoma de Buenos Aires" ~ "CABA",
       provincia %in% c("Buenos Aires", 
@@ -417,17 +397,18 @@ df_clean <- df_clean %>%
       levels = c("CABA", "GBA / Prov. BA", "Interior")
     ),
     
-    # Conversion a numerico
-    # Variable disponible solo desde 2022.2 — el resto son NA estructurales
+    # Conversion a numerico. Escala 0-5 de uso de herramientas de IA (0 = nada, 5 = maximo).
+    # Disponible solo desde 2024.1 — el resto son NA estructurales (mismo origen que seniority).
     uso_ia = parse_number(as.character(uso_ia)),
     
     
-    # Variable de texto libre, se normaliza a TRUE/FALSE
-    # str_to_lower() unifica mayusculas y minusculas antes de detectar patrones
-    # Patron afirmativo: "si|sí|yes|true|dolarizado|dólares|dolares"
-    # captura tanto respuestas directas como descripciones textuales de cobro en dolares
-    # "Cobro parte de mi sueldo en otro país" → NA — ambiguo, no implica necesariamente dolares
-    # Disponible solo desde 2024.1 — el resto son NA estructurales
+    # Normaliza a TRUE/FALSE. str_to_lower() unifica may/min antes de detectar.
+    # OJO origen mixto:
+    #   - 2024+: pregunta directa con TRUE/FALSE reales
+    #   - 2021-2023: PROXY de pagos_en_dolares (seleccion multiple). Solo hay afirmativos:
+    #     quien no cobra en USD quedaba en blanco -> NA (no FALSE). El grupo dolarizado
+    #     pre-2024 esta sesgado a TRUE. NO usar 2021-2023 para comparar dolarizado.
+    # "Cobro parte de mi sueldo en otro pais" -> NA (ambiguo, no implica dolares)
     sueldo_dolarizado = case_when(
       str_detect(str_to_lower(as.character(sueldo_dolarizado)), 
                  "si|sí|yes|true|dolarizado|dólares|dolares") ~ TRUE,
@@ -436,10 +417,9 @@ df_clean <- df_clean %>%
       TRUE ~ NA
     ),
     
-    # sal_bruto,copia de salario_bruto con nombre corto para uso analitico
+    # Copia corta para uso analitico
     sal_bruto = salario_bruto,
-    # log_sal, logaritmo natural de sal_bruto
-    # La transformacion log normaliza la distribucion asimetrica del salario
+    # log natural — normaliza la distribucion asimetrica del salario en pesos
     log_sal = log(sal_bruto)
   )
 
@@ -473,22 +453,22 @@ summary(df_clean$uso_ia)
 # OBSERVACIONES POST-VERIFICACIÓN PASO 5
 # -----------------------------------------------------------------------------
 
-# sal_bruto: minimo 0 y máximo 123.123.123
-# - Los 0 corresponden a encuestados que no revelaron su sueldo o errores de carga
-# - El maximo es claramente un error — nadie gana $123 millones mensuales
-# - Se resuelven en paso 6 (filtro sal_bruto > 0) y paso 7 (filtro outliers p1-p99)
+# sal_bruto: minimo 0 y maximo absurdo (~123 millones — error de carga)
+# - Los 0 (33 registros) son encuestados que no revelaron su sueldo o errores de carga
+# - El maximo es claramente un error — nadie gana esos montos mensuales
+# - Se resuelven en paso 6 (filtro sal_bruto > 0) y paso 8 (filtro outliers p0.1-p99.9)
 
 # log_sal: minimo -Inf y media -Inf
 # - Consecuencia directa de los sal_bruto = 0 — log(0) = -Infinito matematicamente
-# - La media queda contaminada con un solo -Inf
-# - Se resuelve en paso 6 con el filtro
+# - Un solo -Inf contamina la media
+# - Se resuelve en paso 6 con el filtro sal_bruto > 0 (is.na NO captura -Inf; ver paso 6)
 
-# tam_empresa: 7.210 NA (46% del dataset)
-# - NA estructurales — la pregunta no existia en el cuestionario antes de 2023
-# - 2019, 2020, 2021: 100% NA
-# - 2022: 51% NA — solo el segundo semestre incorporo la pregunta
-# - 2023 en adelante: 0% NA
-# - Por esta razon tam_empresa no sera incluida en el modelo de regresion
+# tam_empresa: 29.777 NA (49% del dataset)
+# - 2019, 2020, 2021: 100% NA | 2022: 52% NA | 2023 en adelante: 0% NA
+# - OJO: la pregunta SI existe desde 2021, pero el case_when solo mapea el formato largo
+#   ("De 11 a 50 personas"); 2021 y 2022.1 usan formato abreviado ("11-50") -> quedan NA.
+#   No es un NA estructural puro, es una limitacion de mapeo.
+# - Por el alto % de NA, tam_empresa no se incluye en el modelo de regresion
 
 
 
@@ -497,13 +477,7 @@ summary(df_clean$uso_ia)
 # 6. FILTROS BASICOS DE CALIDAD
 # -----------------------------------------------------------------------------
 
-# Eliminamos observaciones con salario invalido
-# !is.na(sal_bruto) -> 12 NA generados por parse_number en paso 2
-# sal_bruto > 0 —> registros con salario = 0, no representan salarios reales
-# !is.na(log_sal) —> elimina los -Inf generados por log(0)
-#
-# Las tres condiciones estan relacionadas pero se filtran explicitamente
-# para documentar cada tipo de problema
+
 df_clean <- df_clean %>%
   filter(
     !is.na(sal_bruto),
@@ -512,19 +486,28 @@ df_clean <- df_clean %>%
   )
 
 
-# Verificación post-filtro de cantidad de observaciones finales
+
 cat("Observaciones después del filtro de calidad:", nrow(df_clean), "\n")
-# Resultado: 15.521 — se eliminaron 19 registros
-# 12 NA de sal_bruto + registros con sal_bruto = 0
+# Resultado: ~62.610 (verificar al correr) — se eliminan 74 registros (41 NA + 33 ceros)
+
 
 # -----------------------------------------------------------------------------
 # 7. JOIN CON BLUE 
 # -----------------------------------------------------------------------------
 
+
+# Los salarios nominales en pesos no son comparables entre 2019 y 2026 por la inflacion.
+# Se deflacta por el dolar blue (no el oficial: durante el cepo el oficial era artificial)
+# para obtener una escala de poder adquisitivo comparable en el tiempo.
+
+# Serie historica del blue desde la API publica de Bluelytics
 dolar_blue <- read.csv(
   "https://api.bluelytics.com.ar/v2/evolution.csv"
 )
 
+
+# valor_blue = precio medio (promedio compra/venta). Se asigna cada dia a su periodo
+# (anio.semestre) y se promedia -> un blue_promedio por edicion semestral de la encuesta
 dolar_blue_s<-dolar_blue %>%
   filter(type == "Blue", day >= as.Date("2019-01-01")) %>%
   mutate(
@@ -537,9 +520,11 @@ dolar_blue_s<-dolar_blue %>%
   group_by(periodo) %>%
   summarise(blue_promedio = mean(valor_blue))
 
+# periodo a character en ambos lados para que el join matchee (verificado: 0 NA tras el join)
 df_clean <- df_clean %>%
   mutate(periodo = as.character(periodo))
 
+# sal_usd_blue = salario deflactado | log_sal_usd = variable objetivo del modelo
 df_clean <- df_clean %>%
   left_join(dolar_blue_s, by = "periodo") %>%
   mutate(
@@ -548,6 +533,8 @@ df_clean <- df_clean %>%
     valor_blue = blue_promedio
   )
 
+
+# Piso de calidad: descarta salarios menores a 100 USD/mes (errores de carga / part-times marginales)
 df_clean <- df_clean%>%
   filter(sal_usd_blue >100)
 
@@ -556,21 +543,24 @@ df_clean <- df_clean%>%
 # 8. FILTRO DE OUTLIERS EN SALARIO Y EDAD
 # -----------------------------------------------------------------------------
 
-# Filtramos sobre sal_usd_blue (dólares constantes) en lugar de sal_bruto nominal
-# para que el criterio sea comparable entre períodos
-
+# Filtramos sobre sal_usd_blue (dolares constantes), no sobre sal_bruto nominal:
+# asi el criterio de outlier es comparable entre periodos (la inflacion no lo distorsiona).
+# Cortes conservadores p0.1 / p99.9: solo el 0.1% mas extremo de cada cola.
 q1  <- quantile(df_clean$sal_usd_blue, 0.001, na.rm = TRUE)
 q99 <- quantile(df_clean$sal_usd_blue, 0.999, na.rm = TRUE)
 
 cat("Percentil 0.1 (USD):", q1, "\n")
 cat("Percentil 99.9 (USD):", q99, "\n")
 
+
+# is.na(edad) | (...) : conserva filas con edad/experiencia faltante,
+# solo descarta las que tienen un valor presente e implausible.
 df_clean <- df_clean %>%
   filter(
     sal_usd_blue >= q1,
     sal_usd_blue <= q99,
     is.na(edad)        | (edad >= 16        & edad <= 70),
-    is.na(experiencia) | (experiencia >= 0  & experiencia <= 45)  # tope en 45 años
+    is.na(experiencia) | (experiencia >= 0  & experiencia <= 45)  
   )
 
 cat("Observaciones después del filtro de outliers:", nrow(df_clean), "\n")
@@ -581,8 +571,11 @@ cat("Observaciones después del filtro de outliers:", nrow(df_clean), "\n")
 # -----------------------------------------------------------------------------
 
 
-# Seleccionamos las 23 variables analíticas finales
-# Se eliminan las columnas originales reemplazadas por versiones estandarizadas
+# Seleccionamos las 25 variables analiticas finales.
+# Se descartan las columnas crudas ya reemplazadas por versiones estandarizadas
+# (salario_bruto -> sal_bruto, genero -> genero_simple, provincia -> region,
+#  tipo_contrato -> contrato, modalidad_trabajo -> modalidad,
+#  cantidad_personas_organizacion -> tam_empresa) y las auxiliares (blue_promedio, etc.)
 df_clean <- df_clean %>%
   select(
     anio,
@@ -619,8 +612,7 @@ df_clean <- df_clean %>%
   )
 
 
-# Verificación final de estructura
-glimpse(df_clean) # 15.474 registros , 23 columnas
+glimpse(df_clean) # 60.356 registros, 25 columnas
 
 
 
@@ -631,10 +623,8 @@ glimpse(df_clean) # 15.474 registros , 23 columnas
 # Estructura general
 glimpse(df_clean)
 
-# Distribucion por período
+# Distribucion por periodo y categoricas clave
 df_clean %>% count(periodo)
-
-# Variables categoricas clave
 df_clean %>% count(grupo_rol)
 df_clean %>% count(seniority)
 df_clean %>% count(genero_simple)
@@ -658,21 +648,15 @@ df_clean %>%
   )
 
 
-# Verificando que no queden log_usd negativos -> log de cualquier nro <1 da negativo
+# CHECK (solo lectura): confirmamos que no hay log_sal_usd negativos.
+# Devuelve 0 filas porque el piso sal_usd_blue > 100 del Paso 7 ya lo garantiza.
 df_clean %>%
   filter(log_sal_usd < 0) %>%
   summarise(n = n(), min_usd = min(sal_usd_blue), max_usd = max(sal_usd_blue))
 
-# Filtrando esos log usd negativos
-df_clean <- df_clean %>%
-  filter(
-    sal_usd_blue >= q1,
-    sal_usd_blue <= q99,
-    sal_usd_blue >= 1,          # elimina salarios menores a 1 USD
-    is.na(edad) | (edad >= 16 & edad <= 70)
-  )
-
-
+# (El re-filtro que estaba aca era redundante: las 4 condiciones ya se aplicaron
+#  en el Paso 8 y eliminaba 0 filas. Se elimina para no mutar datos en una seccion
+#  de verificacion. No cambia el resultado.)
 
 
 # -----------------------------------------------------------------------------

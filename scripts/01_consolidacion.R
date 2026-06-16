@@ -7,6 +7,13 @@ library(janitor)
 # ARCHIVOS
 # -----------------------------------------------------------------------------
 
+# Tabla de control: cada CSV con su periodo y las filas de preambulo a saltear (skip).
+# El skip varia porque cada encuesta trae arriba un bloque de licencia de largo distinto.
+# Dos generaciones de archivos:
+#   - 2019-2023 (raw): headers en español -> clean_names() los pasa a snake_case
+#   - 2024-2026 (CLEAN): headers ya en snake_case; 2024/2025 traen una columna indice
+#     extra sin nombre que se ignora sola al no mapearse en coalesce_cols
+
 archivos <- tribble(
   ~archivo, ~anio, ~semestre, ~skip,
   
@@ -32,9 +39,6 @@ archivos <- tribble(
   "2026.1 - Sysarmy - Encuesta de remuneración salarial Argentina - Sysarmy - sueldos - 2026.01CLEAN.csv", 2026, 1, 9
 )
 
-# Generamos una tabla (tribble) -> archivos
-
-view(archivos)
 
 # -----------------------------------------------------------------------------
 # FUNCION AUXILIAR
@@ -43,7 +47,7 @@ view(archivos)
 coalesce_cols <- function(data, cols) {
   
   cols_existentes <- intersect(cols, names(data))
-  
+ 
   if (length(cols_existentes) == 0) {
     return(rep(NA, nrow(data)))
   }
